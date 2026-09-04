@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace App\Http\Controllers\Api;
 
@@ -58,6 +58,29 @@ class DashboardController extends Controller
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Falha ao carregar métricas do dashboard.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Retorna indicadores e métricas consolidadas de observabilidade e auditoria da IA.
+     * GET /api/v1/dashboard/ai-observability
+     */
+    public function observability(): JsonResponse
+    {
+        try {
+            $metrics = \App\Services\AI\AIService::getObservabilityMetrics();
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => $metrics,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('ai_errors')->error("DashboardController@observability falhou: {$e->getMessage()}");
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Falha ao consultar métricas de observabilidade da IA.',
             ], 500);
         }
     }

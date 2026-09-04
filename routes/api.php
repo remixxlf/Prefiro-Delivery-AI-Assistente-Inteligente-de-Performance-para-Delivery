@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ChatController;
@@ -41,9 +41,12 @@ Route::prefix('v1')->group(function () {
             ->name('campaigns.generate');
     });
 
-    // ── Dashboard (métricas gerais) ───────────────────────────────────────
+    // ── Dashboard e Observabilidade ──────────────────────────────────────
     Route::prefix('dashboard')->group(function () {
         Route::get('/summary', [DashboardController::class, 'summary'])
             ->name('dashboard.summary');
+
+        Route::get('/ai-observability', [DashboardController::class, 'observability'])
+            ->name('dashboard.observability');
     });
 });

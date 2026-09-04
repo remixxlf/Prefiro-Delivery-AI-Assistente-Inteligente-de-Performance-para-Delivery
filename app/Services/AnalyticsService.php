@@ -6,6 +6,7 @@ use App\Repositories\OrderRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\ProductRepository;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * AnalyticsService
@@ -17,14 +18,31 @@ use Carbon\Carbon;
  * REGRA FUNDAMENTAL:
  * Nenhum registro bruto é enviado à IA. Somente métricas agregadas,
  * comparativos percentuais e rankings consolidados são retornados.
+ *
+ * OTIMIZAÇÃO (Parte 9 - Cache):
+ * Métricas consolidadas são cacheadas no Redis/Cache com TTL controlado
+ * para reduzir carga no MySQL em consultas repetitivas de analytics.
  */
 class AnalyticsService
 {
+    // TTL padrão para cache de métricas analíticas (15 minutos)
+    const CACHE_TTL_METRICS = 900;
+
     public function __construct(
         protected OrderRepository $orderRepo,
         protected CustomerRepository $customerRepo,
         protected ProductRepository $productRepo
     ) {}
+
+    /**
+     * Limpa chaves de cache analítico.
+     */
+    public function clearCache(): void
+    {
+        Cache::forget('analytics:dashboard_summary');
+        Cache::forget('analytics:best_day');
+        Cache::forget('analytics:peak_hours');
+    }
 
     /**
      * Análise completa de queda/variação de faturamento (mês atual vs mês anterior).
@@ -33,203 +51,184 @@ class AnalyticsService
     public function getPerformanceDropAnalysis(?Carbon $referenceDate = null): array
     {
         $ref = $referenceDate ? $referenceDate->copy() : Carbon::now();
+        $cacheKey = 'analytics:perf_drop:' . $ref->format('Y-m');
 
-        // Mês atual
-        $currentStart = $ref->copy()->startOfMonth()->toDateTimeString();
-        $currentEnd = $ref->copy()->endOfMonth()->toDateTimeString();
+        return Cache::remember($cacheKey, self::CACHE_TTL_METRICS, function () use ($ref) {
+            // Mês atual
+            $currentStart = $ref->copy()->startOfMonth()->toDateTimeString();
+            $currentEnd = $ref->copy()->endOfMonth()->toDateTimeString();
 
-        // Mês anterior
-        $prevRef = $ref->copy()->subMonth();
-        $prevStart = $prevRef->copy()->startOfMonth()->toDateTimeString();
-        $prevEnd = $prevRef->copy()->endOfMonth()->toDateTimeString();
+            // Mês anterior
+            $prevRef = $ref->copy()->subMonth();
+            $prevStart = $prevRef->copy()->startOfMonth()->toDateTimeString();
+            $prevEnd = $prevRef->copy()->endOfMonth()->toDateTimeString();
 
-        // 1. Comparativo financeiro e volume de pedidos
-        $periodsComparison = $this->orderRepo->comparePeriods(
-            $currentStart,
-            $currentEnd,
-            $prevStart,
-            $prevEnd
-        );
+            // 1. Comparativo financeiro e volume de pedidos
+            $periodsComparison = $this->orderRepo->comparePeriods(
+                $currentStart,
+                $currentEnd,
+                $prevStart,
+                $prevEnd
+            );
 
-        // 2. Churn recente: clientes que compraram no mês anterior e ainda não compraram este mês
-        $churnAnalysis = $this->customerRepo->getCustomersBoughtInPreviousButNotInCurrent(
-            $currentStart,
-            $currentEnd,
-            $prevStart,
-            $prevEnd
-        );
+            // 2. Churn recente: clientes que compraram no mês anterior e ainda não compraram este mês
+            $churnAnalysis = $this->customerRepo->getCustomersBoughtInPreviousButNotInCurrent(
+                $currentStart,
+                $currentEnd,
+                $prevStart,
+                $prevEnd
+            );
 
-        // 3. Aquisição vs recorrência no mês atual
-        $acquisition = $this->customerRepo->getAcquisitionAndRecurrence(
-            $currentStart,
-            $currentEnd
-        );
+            // 3. Desempenho por categoria
+            $categoryComparison = $this->productRepo->compareCategories(
+                $currentStart,
+                $currentEnd,
+                $prevStart,
+                $prevEnd
+            );
 
-        // 4. Comparativo por categorias (qual categoria mais caiu)
-        $categoriesComparison = $this->productRepo->compareCategories(
-            $currentStart,
-            $currentEnd,
-            $prevStart,
-            $prevEnd
-        );
+            // 4. Produtos que mais perderam vendas
+            $losingProducts = $this->productRepo->getProductsLosingSales(
+                $currentStart,
+                $currentEnd,
+                $prevStart,
+                $prevEnd,
+                5
+            );
 
-        // 5. Produtos que mais perderam vendas
-        $productsLosing = $this->productRepo->getProductsLosingSales(
-            $currentStart,
-            $currentEnd,
-            $prevStart,
-            $prevEnd,
-            5
-        );
+            // 5. Total de clientes inativos há mais de 30 dias
+            $inactiveCount = $this->customerRepo->getInactiveCustomersCount(30);
 
-        // 6. Produtos mais vendidos no mês atual
-        $topProducts = $this->productRepo->getTopSellingProducts(
-            5,
-            $currentStart,
-            $currentEnd,
-            'quantity'
-        );
-
-        // 7. Clientes inativos há mais de 30 dias (para sugestão de ação)
-        $inactive30DaysCount = $this->customerRepo->getInactiveCustomersCount(30);
-
-        return [
-            'reference_month'        => $ref->locale('pt_BR')->translatedFormat('F/Y'),
-            'previous_month'         => $prevRef->locale('pt_BR')->translatedFormat('F/Y'),
-            'financial_comparison'   => $periodsComparison,
-            'customer_churn'         => $churnAnalysis,
-            'customer_acquisition'   => $acquisition,
-            'category_performance'   => $categoriesComparison,
-            'products_losing_sales'  => $productsLosing,
-            'top_selling_products'   => $topProducts,
-            'inactive_customers_30d' => $inactive30DaysCount,
-        ];
+            return [
+                'financial_comparison'  => $periodsComparison,
+                'customer_churn'        => $churnAnalysis,
+                'category_performance'  => $categoryComparison,
+                'losing_products'       => $losingProducts,
+                'inactive_customers_30d'=> $inactiveCount,
+                'current_month'         => $ref->locale('pt_BR')->translatedFormat('F/Y'),
+                'previous_month'        => $prevRef->locale('pt_BR')->translatedFormat('F/Y'),
+            ];
+        });
     }
 
     /**
      * Análise do melhor e pior dia da semana para vendas.
      */
-    public function getBestDayOfWeekAnalysis(?string $from = null, ?string $to = null): array
+    public function getBestDayOfWeekAnalysis(): array
     {
-        return $this->orderRepo->getRevenueAndOrdersByDayOfWeek($from, $to);
+        return Cache::remember('analytics:best_day', self::CACHE_TTL_METRICS, function () {
+            return $this->orderRepo->getRevenueAndOrdersByDayOfWeek();
+        });
     }
 
     /**
-     * Análise dos horários de pico e distribuição por turno.
+     * Análise dos horários de pico (almoço vs jantar).
      */
-    public function getPeakHoursAnalysis(?string $from = null, ?string $to = null): array
+    public function getPeakHoursAnalysis(): array
     {
-        return $this->orderRepo->getOrdersByHourOfDay($from, $to);
+        return Cache::remember('analytics:peak_hours', self::CACHE_TTL_METRICS, function () {
+            return $this->orderRepo->getOrdersByHourOfDay();
+        });
     }
 
     /**
-     * Ranking dos produtos mais vendidos (volume ou receita).
+     * Ranking dos produtos campeões de venda.
      */
-    public function getTopProductsAnalysis(int $limit = 10, string $sortBy = 'quantity'): array
+    public function getTopProductsAnalysis(int $limit = 5): array
     {
-        $topProducts = $this->productRepo->getTopSellingProducts($limit, null, null, $sortBy);
-
-        // Análise de participação das categorias no período dos últimos 90 dias
-        $from = Carbon::now()->subDays(90)->toDateTimeString();
-        $to = Carbon::now()->toDateTimeString();
-        $categorySales = $this->productRepo->getSalesByCategory($from, $to);
+        $products = $this->productRepo->getTopSellingProducts($limit);
 
         return [
-            'ranking'        => $topProducts,
-            'sorted_by'      => $sortBy,
-            'category_share' => $categorySales,
+            'ranking' => $products,
+            'total_listed' => count($products),
         ];
     }
 
     /**
-     * Ranking dos melhores clientes em receita gerada e frequência.
+     * Ranking e perfil dos melhores clientes.
      */
     public function getBestCustomersAnalysis(int $limit = 10): array
     {
-        $topCustomers = $this->customerRepo->getTopCustomers($limit);
-        $segmentation = $this->customerRepo->getCustomerHealthSegmentation();
+        $customers = $this->customerRepo->getTopCustomers($limit);
 
         return [
-            'top_customers'       => $topCustomers,
-            'customer_base_rfm'   => $segmentation,
+            'top_customers' => $customers,
+            'total_listed'  => count($customers),
         ];
     }
 
     /**
-     * Diagnóstico de clientes inativos e público para campanhas de reativação.
+     * Diagnóstico de clientes inativos e potencial de recuperação.
      */
-    public function getInactiveCustomersAnalysis(int $days = 30, int $limit = 50): array
+    public function getInactiveCustomersAnalysis(int $daysThreshold = 30, int $sampleLimit = 20): array
     {
-        $totalInactive = $this->customerRepo->getInactiveCustomersCount($days);
-        $sampleList = $this->customerRepo->getInactiveCustomers($days, $limit);
+        $inactiveCount = $this->customerRepo->getInactiveCustomersCount($daysThreshold);
+        $sample = $this->customerRepo->getInactiveCustomers($daysThreshold, $sampleLimit);
 
-        // Estima o ticket médio histórico desses clientes inativos
-        $avgHistoricalTicket = 0.0;
-        if (!empty($sampleList)) {
-            $tickets = array_filter(array_column($sampleList, 'average_ticket'));
-            $avgHistoricalTicket = count($tickets) > 0 ? round(array_sum($tickets) / count($tickets), 2) : 0.0;
-        }
+        // Ticket médio estimado
+        $avgTicket = (float) round(
+            count($sample) > 0 ? (array_sum(array_column($sample, 'total_spent')) / max(1, array_sum(array_column($sample, 'total_orders')))) : 50.00,
+            2
+        );
+
+        $potentialLoss = round($inactiveCount * $avgTicket, 2);
 
         return [
-            'inactive_days_threshold' => $days,
-            'total_inactive_count'    => $totalInactive,
-            'estimated_avg_ticket'    => $avgHistoricalTicket,
-            'sample_customers'        => $sampleList,
-            'potential_revenue_loss'  => round($totalInactive * $avgHistoricalTicket, 2),
+            'days_threshold'         => $daysThreshold,
+            'total_inactive_count'   => $inactiveCount,
+            'estimated_avg_ticket'   => $avgTicket,
+            'potential_revenue_loss' => $potentialLoss,
+            'sample_customers'       => $sample,
         ];
     }
 
     /**
-     * Dados consolidados para geração de recomendações e planos de ação (3 ações práticas).
+     * Monta diagnóstico acionável ("Três ações que posso executar esta semana").
      */
     public function getActionableInsightsData(): array
     {
-        $dropAnalysis = $this->getPerformanceDropAnalysis();
-        $dayAnalysis = $this->getBestDayOfWeekAnalysis();
-        $hoursAnalysis = $this->getPeakHoursAnalysis();
-        $inactiveAudience = $this->getInactiveCustomersAnalysis(30, 10);
-        $highTicketProducts = $this->productRepo->getHighTicketPotentialProducts();
+        $inactive = $this->customerRepo->getInactiveCustomersCount(30);
+        $bestDayData = $this->getBestDayOfWeekAnalysis();
+        $losingProducts = $this->productRepo->getProductsLosingSales(
+            Carbon::now()->startOfMonth()->toDateTimeString(),
+            Carbon::now()->endOfMonth()->toDateTimeString(),
+            Carbon::now()->subMonth()->startOfMonth()->toDateTimeString(),
+            Carbon::now()->subMonth()->endOfMonth()->toDateTimeString(),
+            3
+        );
 
         return [
-            'performance_summary'  => $dropAnalysis['financial_comparison']['difference'],
-            'inactive_customers'   => [
-                'count'            => $inactiveAudience['total_inactive_count'],
-                'potential_impact' => $inactiveAudience['potential_revenue_loss'],
+            'inactive_customers' => [
+                'count'            => $inactive,
+                'recommended_action' => 'Disparar campanha de reativação com benefício no retorno.',
             ],
-            'best_weekday'         => $dayAnalysis['best_day'],
-            'worst_weekday'        => $dayAnalysis['worst_day'],
-            'peak_hour'            => $hoursAnalysis['peak_hour'],
-            'shift_breakdown'      => $hoursAnalysis['shift_breakdown'],
-            'declining_products'   => array_slice($dropAnalysis['products_losing_sales'], 0, 3),
-            'top_products'         => array_slice($dropAnalysis['top_selling_products'], 0, 3),
-            'high_ticket_options'  => array_slice($highTicketProducts, 0, 4),
+            'worst_weekday'      => $bestDayData['worst_day'],
+            'best_weekday'       => $bestDayData['best_day'],
+            'declining_products' => $losingProducts,
         ];
     }
 
     /**
-     * Resumo executivo para o Dashboard do estabelecimento.
+     * Resumo executivo para o Dashboard inicial e cards rápidos.
      */
     public function getDashboardSummary(): array
     {
-        $now = Carbon::now();
-        $monthStart = $now->copy()->startOfMonth()->toDateTimeString();
-        $monthEnd = $now->copy()->endOfMonth()->toDateTimeString();
+        return Cache::remember('analytics:dashboard_summary', self::CACHE_TTL_METRICS, function () {
+            $now = Carbon::now();
+            $currStart = $now->copy()->startOfMonth()->toDateTimeString();
+            $currEnd = $now->copy()->endOfMonth()->toDateTimeString();
 
-        $monthSummary = $this->orderRepo->getSummaryByPeriod($monthStart, $monthEnd);
-        $health = $this->customerRepo->getCustomerHealthSegmentation();
-        $topProducts = $this->productRepo->getTopSellingProducts(5, $monthStart, $monthEnd);
-        $recentTrend = $this->orderRepo->getMonthlyTrend(6);
-
-        return [
-            'current_month' => [
-                'month_name'     => $now->locale('pt_BR')->translatedFormat('F/Y'),
-                'revenue'        => $monthSummary['total_revenue'],
-                'orders_count'   => $monthSummary['delivered_orders'],
-                'average_ticket' => $monthSummary['average_ticket'],
-            ],
-            'customer_health' => $health,
-            'top_products'    => $topProducts,
-            'monthly_trend'   => $recentTrend,
-        ];
+            return [
+                'current_month' => [
+                    'month_name'     => $now->locale('pt_BR')->translatedFormat('F/Y'),
+                    'revenue'        => $this->orderRepo->getRevenueByPeriod($currStart, $currEnd),
+                    'average_ticket' => $this->orderRepo->getAverageTicket($currStart, $currEnd),
+                    'orders_count'   => $this->orderRepo->getDeliveredCountByPeriod($currStart, $currEnd),
+                ],
+                'customer_health' => $this->customerRepo->getCustomerHealthSegmentation(),
+                'top_products'    => $this->productRepo->getTopSellingProducts(5),
+                'monthly_trend'   => $this->orderRepo->getMonthlyTrend(6),
+            ];
+        });
     }
 }

@@ -1,10 +1,11 @@
-﻿<?php
+<?php
 
 namespace App\Services\AI;
 
 use App\Models\AiConversation;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 /**
@@ -70,21 +71,56 @@ class AIService
             ];
         }
 
-        // 2. Monta o contexto analítico estritamente necessário (apenas métricas agregadas)
+        // 2. Verifica Cache Redis para perguntas idênticas recentes (TTL de 1h)
+        // Economiza tokens e oferece resposta instantânea em consultas repetitivas
+        $cacheKey = 'ai:response:' . md5(trim(mb_strtolower($cleanQuestion)));
+        $cacheTtl = (int) config('ai.cache_ttl_seconds', 3600);
+
+        if (Cache::has($cacheKey)) {
+            $cachedData = Cache::get($cacheKey);
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+
+            $this->logConversation([
+                'session_id'       => $sessionId,
+                'question'         => $cleanQuestion,
+                'context_data'     => $cachedData['context_data'] ?? null,
+                'prompt_sent'      => '[RESPOSTA_RECUPERADA_DO_CACHE_REDIS]',
+                'response'         => $cachedData['response'],
+                'intent'           => $cachedData['intent'],
+                'provider'         => $cachedData['provider'],
+                'model'            => $cachedData['model'],
+                'tokens_input'     => 0,
+                'tokens_output'    => 0,
+                'tokens_total'     => 0,
+                'cost_usd'         => 0.0,
+                'response_time_ms' => $durationMs,
+                'status'           => AiConversation::STATUS_CACHED,
+                'error_message'    => null,
+                'was_streamed'     => false,
+            ]);
+
+            return array_merge($cachedData, [
+                'session_id' => $sessionId,
+                'cached'     => true,
+                'status'     => AiConversation::STATUS_CACHED,
+            ]);
+        }
+
+        // 3. Monta o contexto analítico estritamente necessário (apenas métricas agregadas)
         $contextData = $this->contextBuilder->build($intent, $resolved['parameters']);
 
-        // 3. Monta o prompt
+        // 4. Monta o prompt
         $systemPrompt = $this->promptBuilder->getSystemPrompt();
         $userPrompt = $this->promptBuilder->buildUserPrompt($cleanQuestion, $contextData);
 
-        // 4. Executa a chamada ao provedor de IA configurado
+        // 5. Executa a chamada ao provedor de IA configurado
         $provider = config('ai.provider', 'openai');
         $aiResult = $this->callProvider($provider, $systemPrompt, $userPrompt, $contextData);
 
         $endTime = microtime(true);
         $durationMs = (int) round(($endTime - $startTime) * 1000);
 
-        // 5. Registra auditoria completa no banco
+        // 6. Registra auditoria completa no banco e nos logs
         $this->logConversation([
             'session_id'       => $sessionId,
             'question'         => $cleanQuestion,
@@ -104,7 +140,7 @@ class AIService
             'was_streamed'     => false,
         ]);
 
-        return [
+        $resultPayload = [
             'session_id'    => $sessionId,
             'intent'        => $intent,
             'response'      => $aiResult['text'],
@@ -118,7 +154,17 @@ class AIService
             ],
             'cost_usd'      => $aiResult['cost_usd'],
             'status'        => $aiResult['status'],
+            'cached'        => false,
         ];
+
+        // Salva no Cache para reutilização
+        try {
+            Cache::put($cacheKey, $resultPayload, $cacheTtl);
+        } catch (\Throwable $e) {
+            Log::channel('ai_errors')->warning("Falha ao salvar cache de resposta da IA: " . $e->getMessage());
+        }
+
+        return $resultPayload;
     }
 
     /**
@@ -682,14 +728,48 @@ class AIService
     }
 
     /**
-     * Registra auditoria na tabela ai_conversations.
+     * Registra auditoria detalhada na tabela ai_conversations e no log dedicado.
      */
     protected function logConversation(array $data): void
     {
         try {
             AiConversation::create($data);
+
+            // Log estruturado no canal diário dedicado 'ai'
+            Log::channel('ai')->info("AI Call Auditor [{$data['intent']}]", [
+                'session_id'  => $data['session_id'],
+                'provider'    => $data['provider'],
+                'model'       => $data['model'],
+                'tokens'      => $data['tokens_total'],
+                'cost_usd'    => $data['cost_usd'],
+                'duration_ms' => $data['response_time_ms'],
+                'status'      => $data['status'],
+                'streamed'    => $data['was_streamed'] ?? false,
+            ]);
         } catch (\Throwable $e) {
-            Log::error("Falha ao salvar auditoria de IA: " . $e->getMessage());
+            Log::channel('ai_errors')->error("Falha ao salvar auditoria de IA: " . $e->getMessage(), [
+                'exception' => $e,
+            ]);
         }
+    }
+
+    /**
+     * Retorna indicadores e métricas consolidadas de observabilidade da IA.
+     */
+    public static function getObservabilityMetrics(): array
+    {
+        return [
+            'total_calls'        => AiConversation::count(),
+            'successful_calls'   => AiConversation::where('status', AiConversation::STATUS_SUCCESS)->count(),
+            'cached_calls'       => AiConversation::where('status', AiConversation::STATUS_CACHED)->count(),
+            'fallback_calls'     => AiConversation::where('status', AiConversation::STATUS_FALLBACK)->count(),
+            'error_calls'        => AiConversation::whereIn('status', [AiConversation::STATUS_ERROR, AiConversation::STATUS_TIMEOUT])->count(),
+            'total_tokens_used'  => (int) AiConversation::sum('tokens_total'),
+            'total_cost_usd'     => (float) round(AiConversation::sum('cost_usd'), 6),
+            'avg_response_time_ms' => (int) round(AiConversation::avg('response_time_ms') ?? 0),
+            'recent_logs'        => AiConversation::orderBy('created_at', 'desc')->take(5)->get([
+                'id', 'session_id', 'intent', 'provider', 'model', 'tokens_total', 'cost_usd', 'response_time_ms', 'status', 'created_at'
+            ]),
+        ];
     }
 }
