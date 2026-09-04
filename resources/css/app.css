@@ -1,0 +1,38 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Variáveis globais ────────────────────────────────────────────── */
+:root {
+    --color-primary:   #7C3AED;  /* violet-600 */
+    --color-secondary: #EF4444;  /* red-500    */
+    --color-surface:   #F9FAFB;  /* gray-50    */
+}
+
+/* ─── Scrollbar customizada ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* ─── Animação de digitação (streaming) ─────────────────────────────── */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
+.typing-cursor::after {
+    content: "▋";
+    animation: blink 1s step-end infinite;
+    color: var(--color-primary);
+}
+
+/* ─── Markdown no chat ───────────────────────────────────────────────── */
+.prose-chat p  { margin-bottom: 0.5rem; }
+.prose-chat ul { list-style: disc inside; margin-bottom: 0.5rem; }
+.prose-chat ol { list-style: decimal inside; margin-bottom: 0.5rem; }
+.prose-chat strong { font-weight: 600; }
+.prose-chat code {
+    background: rgba(0,0,0,0.07);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+}
