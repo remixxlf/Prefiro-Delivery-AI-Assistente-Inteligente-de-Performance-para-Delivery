@@ -322,7 +322,9 @@ class OrderRepository
             ? "strftime('%Y-%m', ordered_at)"
             : "DATE_FORMAT(ordered_at, '%Y-%m')";
 
-        $startDate = Carbon::now()->subMonths($months)->startOfMonth()->toDateTimeString();
+        $latestOrderDate = Order::delivered()->max('ordered_at');
+        $reference = $latestOrderDate ? Carbon::parse($latestOrderDate) : Carbon::now();
+        $startDate = $reference->copy()->subMonths($months)->startOfMonth()->toDateTimeString();
 
         $records = Order::delivered()
             ->where('ordered_at', '>=', $startDate)

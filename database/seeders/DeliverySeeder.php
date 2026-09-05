@@ -42,6 +42,9 @@ use Illuminate\Support\Facades\DB;
  */
 class DeliverySeeder extends Seeder
 {
+    // ── Data de corte da simulação (congelada para garantir determinismo e reprodutibilidade)
+    public const SIMULATED_DATE = '2026-09-05 12:00:00';
+
     // ── Catálogo fixo de produtos (garante consistência nas análises) ───
     private static array $productCatalog = [
         // Marmitas
@@ -135,6 +138,16 @@ class DeliverySeeder extends Seeder
 
     public function run(): void
     {
+        // Define seed determinístico para que toda execução produza dados idênticos
+        mt_srand(20260905);
+        srand(20260905);
+
+        // Verificação de idempotência: se o banco já contém pedidos e clientes, preserva os dados
+        if (Order::count() > 0 && Customer::count() >= 100) {
+            $this->command->info("ℹ️ Banco de dados já possui registros populados. Mantendo integridade.");
+            return;
+        }
+
         $this->command->info('🍽️  Iniciando DeliverySeeder...');
 
         DB::transaction(function () {
@@ -238,12 +251,15 @@ class DeliverySeeder extends Seeder
         $start = Carbon::createFromDate($year, $month, 1)->startOfMonth();
         $end   = Carbon::createFromDate($year, $month, 1)->endOfMonth();
 
-        // Limita ao dia atual se for o mês corrente
-        if ($start->isCurrentMonth()) {
-            $end = Carbon::now()->subDay();
+        // Limita à data de corte da simulação para manter determinismo temporal
+        $simulatedDate = Carbon::parse(self::SIMULATED_DATE);
+        if ($start->format('Y-m') === $simulatedDate->format('Y-m')) {
+            $end = $simulatedDate->copy()->subDay();
             if ($end->lt($start)) {
                 return [];
             }
+        } elseif ($start->gt($simulatedDate)) {
+            return [];
         }
 
         // Gera dias candidatos ponderados por dia da semana
@@ -360,7 +376,7 @@ class DeliverySeeder extends Seeder
     ): void {
         $orderedAt  = Carbon::parse($order->ordered_at);
         $dayOfWeek  = $orderedAt->dayOfWeek;
-        $monthsAgo  = Carbon::now()->diffInMonths($orderedAt);
+        $monthsAgo  = Carbon::parse(self::SIMULATED_DATE)->diffInMonths($orderedAt);
 
         // ── Seleciona produto principal ────────────────────────────────
         $mainProduct = $this->selectMainProduct(

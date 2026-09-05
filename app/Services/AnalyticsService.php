@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Repositories\OrderRepository;
 use App\Repositories\CustomerRepository;
 use App\Repositories\ProductRepository;
+use App\Models\Order;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -35,6 +36,30 @@ class AnalyticsService
     ) {}
 
     /**
+     * Retorna a data de referência para análises temporais.
+     * Se o mês atual não possuir pedidos entregues, ancora na data do pedido mais recente no banco.
+     */
+    public function getReferenceDate(?Carbon $customDate = null): Carbon
+    {
+        if ($customDate) {
+            return $customDate->copy();
+        }
+
+        $now = Carbon::now();
+        $currStart = $now->copy()->startOfMonth()->toDateTimeString();
+        $currEnd = $now->copy()->endOfMonth()->toDateTimeString();
+
+        if ($this->orderRepo->getDeliveredCountByPeriod($currStart, $currEnd) === 0) {
+            $lastOrderDate = Order::where('status', Order::STATUS_DELIVERED)->max('ordered_at');
+            if ($lastOrderDate) {
+                return Carbon::parse($lastOrderDate);
+            }
+        }
+
+        return $now;
+    }
+
+    /**
      * Limpa chaves de cache analítico.
      */
     public function clearCache(): void
@@ -50,7 +75,7 @@ class AnalyticsService
      */
     public function getPerformanceDropAnalysis(?Carbon $referenceDate = null): array
     {
-        $ref = $referenceDate ? $referenceDate->copy() : Carbon::now();
+        $ref = $this->getReferenceDate($referenceDate);
         $cacheKey = 'analytics:perf_drop:' . $ref->format('Y-m');
 
         return Cache::remember($cacheKey, self::CACHE_TTL_METRICS, function () use ($ref) {
@@ -191,13 +216,14 @@ class AnalyticsService
      */
     public function getActionableInsightsData(): array
     {
+        $ref = $this->getReferenceDate();
         $inactive = $this->customerRepo->getInactiveCustomersCount(30);
         $bestDayData = $this->getBestDayOfWeekAnalysis();
         $losingProducts = $this->productRepo->getProductsLosingSales(
-            Carbon::now()->startOfMonth()->toDateTimeString(),
-            Carbon::now()->endOfMonth()->toDateTimeString(),
-            Carbon::now()->subMonth()->startOfMonth()->toDateTimeString(),
-            Carbon::now()->subMonth()->endOfMonth()->toDateTimeString(),
+            $ref->copy()->startOfMonth()->toDateTimeString(),
+            $ref->copy()->endOfMonth()->toDateTimeString(),
+            $ref->copy()->subMonth()->startOfMonth()->toDateTimeString(),
+            $ref->copy()->subMonth()->endOfMonth()->toDateTimeString(),
             3
         );
 
@@ -218,7 +244,7 @@ class AnalyticsService
     public function getDashboardSummary(): array
     {
         return Cache::remember('analytics:dashboard_summary', self::CACHE_TTL_METRICS, function () {
-            $now = Carbon::now();
+            $now = $this->getReferenceDate();
             $currStart = $now->copy()->startOfMonth()->toDateTimeString();
             $currEnd = $now->copy()->endOfMonth()->toDateTimeString();
 
