@@ -28,53 +28,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // Tratamento seguro de exceções para endpoints de API
-        // Garante que NENHUM stack trace ou erro interno seja vazado para o usuário
+        // Intercepta qualquer exceção e exibe na tela brutalmente para debug
         $exceptions->render(function (\Throwable $e, Request $request) {
-            if ($request->is('api/*')) {
-                // Erros de Validação (Form Requests)
-                if ($e instanceof ValidationException) {
-                    return response()->json([
-                        'status'  => 'error',
-                        'message' => 'Dados da requisição inválidos.',
-                        'errors'  => $e->errors(),
-                    ], 422);
-                }
-
-                // Erros HTTP (inclui 429 Too Many Requests e 404 Not Found)
-                if ($e instanceof HttpExceptionInterface) {
-                    $statusCode = $e->getStatusCode();
-                    $message = $statusCode === 429
-                        ? 'Limite de requisições excedido. Por favor, aguarde antes de enviar uma nova pergunta.'
-                        : ($statusCode === 404 ? 'Recurso da API não encontrado.' : $e->getMessage());
-
-                    return response()->json([
-                        'status'  => 'error',
-                        'message' => $message,
-                    ], $statusCode);
-                }
-
-                // Registra log detalhado internamente no canal dedicado de erros de IA
-                try {
-                    Log::channel('ai_errors')->error('Exceção na API capturada com segurança: ' . $e->getMessage(), [
-                        'exception_class' => get_class($e),
-                        'path'            => $request->path(),
-                        'method'          => $request->method(),
-                        'ip'              => $request->ip(),
-                        'file'            => $e->getFile(),
-                        'line'            => $e->getLine(),
-                    ]);
-                } catch (\Throwable $logError) {
-                    // Fallback se monolog falhar
-                    Log::error('Exceção na API: ' . $e->getMessage());
-                }
-
-                // Resposta opaca e segura para produção (HTTP 500 sem stack trace)
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Ocorreu um erro interno ao processar sua solicitação. Tente novamente mais tarde.',
-                ], 500);
-            }
+            echo "<h1>CRITICAL ERROR TRACE (KERNEL)</h1>";
+            echo "<b>Message:</b> " . $e->getMessage() . "<br><br>";
+            echo "<b>File:</b> " . $e->getFile() . ":" . $e->getLine() . "<br><br>";
+            echo "<b>Trace:</b><br><pre>" . $e->getTraceAsString() . "</pre>";
+            exit(1);
         });
     })
     ->booted(function () {
