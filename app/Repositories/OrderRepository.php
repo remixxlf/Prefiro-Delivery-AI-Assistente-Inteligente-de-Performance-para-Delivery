@@ -49,6 +49,16 @@ class OrderRepository
     }
 
     /**
+     * Quantidade de pedidos entregues em um período.
+     */
+    public function getDeliveredCountByPeriod(string $from, string $to): int
+    {
+        return (int) Order::delivered()
+            ->inPeriod($from, $to)
+            ->count();
+    }
+
+    /**
      * Resumo executivo completo de métricas em um período.
      */
     public function getSummaryByPeriod(string $from, string $to): array

@@ -490,21 +490,18 @@ class DeliverySeeder extends Seeder
 
     private function updateCustomerOrderDates(): void
     {
-        DB::statement("
-            UPDATE customers c
-            JOIN (
-                SELECT
-                    customer_id,
-                    MIN(ordered_at) AS first_order,
-                    MAX(ordered_at) AS last_order
-                FROM orders
-                WHERE status != 'cancelled'
-                GROUP BY customer_id
-            ) agg ON c.id = agg.customer_id
-            SET
-                c.first_order_at = agg.first_order,
-                c.last_order_at  = agg.last_order
-        ");
+        $aggregates = DB::table('orders')
+            ->where('status', '!=', 'cancelled')
+            ->groupBy('customer_id')
+            ->select('customer_id', DB::raw('MIN(ordered_at) as first_order'), DB::raw('MAX(ordered_at) as last_order'))
+            ->get();
+
+        foreach ($aggregates as $row) {
+            DB::table('customers')->where('id', $row->customer_id)->update([
+                'first_order_at' => $row->first_order,
+                'last_order_at'  => $row->last_order,
+            ]);
+        }
     }
 
     // ── Helpers de dados ────────────────────────────────────────────────

@@ -63,7 +63,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'Ocorreu um erro interno ao processar sua solicitação. Tente novamente mais tarde.',
+                    'message' => 'Erro na API: ' . $e->getMessage() . ' [' . basename($e->getFile()) . ':' . $e->getLine() . ']',
                 ], 500);
             }
         });
