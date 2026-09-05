@@ -57,7 +57,7 @@ class DashboardController extends Controller
 
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Falha ao carregar métricas do dashboard.',
+                'message' => 'Falha ao carregar métricas do dashboard: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine(),
             ], 500);
         }
     }
