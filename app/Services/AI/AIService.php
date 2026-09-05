@@ -304,6 +304,14 @@ class AIService
         }
 
         // Auto-detecção inteligente de chaves disponíveis
+        if (!empty(config('ai.groq.api_key'))) {
+            return 'groq';
+        }
+
+        if (!empty(config('ai.openrouter.api_key'))) {
+            return 'openrouter';
+        }
+
         if (!empty(config('ai.gemini.api_key'))) {
             return 'gemini';
         }
@@ -330,10 +338,12 @@ class AIService
         if (!empty($apiKey)) {
             try {
                 return match ($provider) {
-                    'openai'    => $this->callOpenAI($apiKey, $systemPrompt, $userPrompt),
-                    'gemini'    => $this->callGemini($apiKey, $systemPrompt, $userPrompt),
-                    'anthropic' => $this->callAnthropic($apiKey, $systemPrompt, $userPrompt),
-                    default     => $this->callOpenAI($apiKey, $systemPrompt, $userPrompt),
+                    'openai'     => $this->callOpenAI($apiKey, $systemPrompt, $userPrompt),
+                    'groq'       => $this->callOpenAICompatible('groq', $apiKey, config('ai.groq.base_url', 'https://api.groq.com/openai/v1'), config('ai.groq.model', 'llama-3.3-70b-versatile'), $systemPrompt, $userPrompt),
+                    'openrouter' => $this->callOpenAICompatible('openrouter', $apiKey, config('ai.openrouter.base_url', 'https://openrouter.ai/api/v1'), config('ai.openrouter.model', 'deepseek/deepseek-r1:free'), $systemPrompt, $userPrompt),
+                    'gemini'     => $this->callGemini($apiKey, $systemPrompt, $userPrompt),
+                    'anthropic'  => $this->callAnthropic($apiKey, $systemPrompt, $userPrompt),
+                    default      => $this->callOpenAI($apiKey, $systemPrompt, $userPrompt),
                 };
             } catch (\Throwable $e) {
                 Log::error("Erro na API de IA ({$provider}): " . $e->getMessage());
@@ -347,6 +357,47 @@ class AIService
         // Motor Analítico Determinístico Baseado nos Dados Reais
         // Garante que o sistema funciona e é 100% testável mesmo sem chaves externas cadastradas no ambiente
         return $this->generateDeterministicAnalysis($contextData, $userPrompt);
+    }
+
+    /**
+     * Chamada genérica para provedores compatíveis com a API OpenAI (Groq, OpenRouter, DeepSeek, etc).
+     */
+    protected function callOpenAICompatible(string $provider, string $apiKey, string $baseUrl, string $model, string $systemPrompt, string $userPrompt): array
+    {
+        $url = rtrim($baseUrl, '/') . '/chat/completions';
+
+        $response = Http::withToken($apiKey)
+            ->timeout(40)
+            ->post($url, [
+                'model'       => $model,
+                'temperature' => 0.3,
+                'max_tokens'  => 2000,
+                'messages'    => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $userPrompt],
+                ],
+            ]);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException(ucfirst($provider) . " API Error ({$response->status()}): " . $response->body());
+        }
+
+        $json = $response->json();
+        $text = $json['choices'][0]['message']['content'] ?? '';
+        $tokensIn = $json['usage']['prompt_tokens'] ?? 0;
+        $tokensOut = $json['usage']['completion_tokens'] ?? 0;
+        $tokensTotal = $json['usage']['total_tokens'] ?? ($tokensIn + $tokensOut);
+
+        return [
+            'provider'     => $provider,
+            'model'        => $model,
+            'text'         => $text,
+            'tokens_input' => $tokensIn,
+            'tokens_output'=> $tokensOut,
+            'tokens_total' => $tokensTotal,
+            'cost_usd'     => 0.0,
+            'status'       => AiConversation::STATUS_SUCCESS,
+        ];
     }
 
     /**

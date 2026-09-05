@@ -5,14 +5,48 @@ return [
     |--------------------------------------------------------------------------
     | Provedor de IA padrão
     |--------------------------------------------------------------------------
-    | Suporte: "openai" | "gemini" | "anthropic"
-    | Auto-detecta: Se GEMINI_API_KEY for definida, usa gemini automaticamente.
+    | Suporte: "groq" | "openrouter" | "gemini" | "openai" | "anthropic"
+    | Auto-detecta qualquer chave configurada no ambiente.
     */
     'provider' => env('AI_PROVIDER') ?: (
-        (env('GEMINI_API_KEY') || env('GOOGLE_API_KEY') || env('GEMINI_KEY')) ? 'gemini' : (
-            env('ANTHROPIC_API_KEY') ? 'anthropic' : 'openai'
+        env('GROQ_API_KEY') ? 'groq' : (
+            env('OPENROUTER_API_KEY') ? 'openrouter' : (
+                (env('GEMINI_API_KEY') || env('GOOGLE_API_KEY') || env('GEMINI_KEY')) ? 'gemini' : (
+                    env('ANTHROPIC_API_KEY') ? 'anthropic' : 'openai'
+                )
+            )
         )
     ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Groq (100% Gratuito - Rápido - Suporta DeepSeek e LLaMA 3.3)
+    | Obtenha em: https://console.groq.com/keys
+    |--------------------------------------------------------------------------
+    */
+    'groq' => [
+        'api_key'  => env('GROQ_API_KEY'),
+        // Modelos gratuitos no Groq:
+        // - llama-3.3-70b-versatile (Recomendado, nível GPT-4)
+        // - deepseek-r1-distill-llama-70b (Raciocínio DeepSeek)
+        'model'    => env('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+        'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | OpenRouter (Modelos Gratuitos incluindo DeepSeek R1)
+    | Obtenha em: https://openrouter.ai/keys
+    |--------------------------------------------------------------------------
+    */
+    'openrouter' => [
+        'api_key'  => env('OPENROUTER_API_KEY'),
+        // Modelos gratuitos no OpenRouter:
+        // - deepseek/deepseek-r1:free
+        // - meta-llama/llama-3.3-70b-instruct:free
+        'model'    => env('OPENROUTER_MODEL', 'deepseek/deepseek-r1:free'),
+        'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+    ],
 
     /*
     |--------------------------------------------------------------------------
