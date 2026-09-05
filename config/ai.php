@@ -27,9 +27,9 @@ return [
     'groq' => [
         'api_key'  => env('GROQ_API_KEY', env('GROK_API_KEY', env('GROQ_KEY', env('GROK_KEY', getenv('GROQ_API_KEY') ?: getenv('GROK_API_KEY'))))),
         // Modelos gratuitos no Groq:
-        // - llama-3.3-70b-versatile (Recomendado, nível GPT-4)
-        // - deepseek-r1-distill-llama-70b (Raciocínio DeepSeek)
-        'model'    => env('GROQ_MODEL', env('GROK_MODEL', 'llama-3.3-70b-versatile')),
+        // - deepseek-r1-distill-llama-70b (DeepSeek R1 Oficial no Groq)
+        // - deepseek-r1-distill-qwen-32b
+        'model'    => env('GROQ_MODEL', env('GROK_MODEL', 'deepseek-r1-distill-llama-70b')),
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     ],
 

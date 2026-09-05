@@ -8,6 +8,7 @@ export CACHE_DRIVER="file"
 export SESSION_DRIVER="file"
 export QUEUE_CONNECTION="sync"
 export DB_CONNECTION="sqlite"
+export GROQ_MODEL="${GROQ_MODEL:-deepseek-r1-distill-llama-70b}"
 
 # Configura .env padrão caso não exista
 if [ ! -f .env ]; then

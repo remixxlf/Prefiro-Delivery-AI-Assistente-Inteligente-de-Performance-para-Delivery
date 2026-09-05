@@ -377,7 +377,7 @@ class AIService
             try {
                 return match ($provider) {
                     'openai'     => $this->callOpenAI($apiKey, $systemPrompt, $userPrompt),
-                    'groq'       => $this->callOpenAICompatible('groq', $apiKey, config('ai.groq.base_url', 'https://api.groq.com/openai/v1'), config('ai.groq.model', 'llama-3.3-70b-versatile'), $systemPrompt, $userPrompt),
+                    'groq'       => $this->callOpenAICompatible('groq', $apiKey, config('ai.groq.base_url', 'https://api.groq.com/openai/v1'), config('ai.groq.model', 'deepseek-r1-distill-llama-70b'), $systemPrompt, $userPrompt),
                     'openrouter' => $this->callOpenAICompatible('openrouter', $apiKey, config('ai.openrouter.base_url', 'https://openrouter.ai/api/v1'), config('ai.openrouter.model', 'deepseek/deepseek-r1:free'), $systemPrompt, $userPrompt),
                     'gemini'     => $this->callGemini($apiKey, $systemPrompt, $userPrompt),
                     'anthropic'  => $this->callAnthropic($apiKey, $systemPrompt, $userPrompt),
@@ -405,17 +405,57 @@ class AIService
     {
         $url = rtrim($baseUrl, '/') . '/chat/completions';
 
-        $response = Http::withToken($apiKey)
-            ->timeout(40)
-            ->post($url, [
-                'model'       => $model,
-                'temperature' => 0.3,
-                'max_tokens'  => 2000,
-                'messages'    => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user',   'content' => $userPrompt],
-                ],
-            ]);
+        $payload = [
+            'model'       => $model,
+            'temperature' => 0.3,
+            'max_tokens'  => 2000,
+            'messages'    => [
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user',   'content' => $userPrompt],
+            ],
+        ];
+
+        $response = Http::withToken($apiKey)->timeout(40)->post($url, $payload);
+
+        // Se o modelo não existir no Groq (404), busca lista de modelos ativos dinamicamente
+        if (!$response->successful() && $response->status() === 404 && $provider === 'groq') {
+            $fallbackModels = [
+                'deepseek-r1-distill-llama-70b',
+                'deepseek-r1-distill-qwen-32b',
+                'qwen-2.5-32b',
+                'llama-3.1-70b-versatile',
+            ];
+
+            // Tenta consultar dinamicamente a lista de modelos da conta
+            try {
+                $modelsResp = Http::withToken($apiKey)->timeout(10)->get(rtrim($baseUrl, '/') . '/models');
+                if ($modelsResp->successful()) {
+                    $available = collect($modelsResp->json('data', []))
+                        ->pluck('id')
+                        ->filter(fn ($id) => !str_contains($id, 'whisper') && !str_contains($id, 'guard') && !str_contains($id, 'vision'))
+                        ->values()
+                        ->toArray();
+
+                    if (!empty($available)) {
+                        $fallbackModels = array_values(array_unique(array_merge($fallbackModels, $available)));
+                    }
+                }
+            } catch (\Throwable $e) {
+                // segue com os modelos candidatos
+            }
+
+            foreach ($fallbackModels as $candidate) {
+                if ($candidate === $model) continue;
+
+                $payload['model'] = $candidate;
+                $retry = Http::withToken($apiKey)->timeout(40)->post($url, $payload);
+                if ($retry->successful()) {
+                    $response = $retry;
+                    $model = $candidate;
+                    break;
+                }
+            }
+        }
 
         if (!$response->successful()) {
             throw new \RuntimeException(ucfirst($provider) . " API Error ({$response->status()}): " . $response->body());
