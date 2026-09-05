@@ -9,6 +9,9 @@ if [ "$DB_CONNECTION" = "sqlite" ]; then
     chmod 777 database
 fi
 
+# Descoberta de pacotes em runtime com variaveis de ambiente ativas
+php artisan package:discover --ansi || true
+
 # Executa migrations e seeders
 php artisan migrate --force --seed --graceful || true
 

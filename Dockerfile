@@ -1,4 +1,4 @@
-﻿# Multi-stage Dockerfile para Deploy em Produção (Railway, Render, Fly.io)
+# Multi-stage Dockerfile para Deploy em Produção (Railway, Render, Fly.io)
 
 # ── Stage 1: Build do Frontend Vue 3 ──────────────────────────────────
 FROM node:20-alpine AS frontend
@@ -33,8 +33,8 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY . .
 COPY --from=frontend /app/public/build ./public/build
 
-# Instala dependências PHP de produção
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Instala dependências PHP de produção sem disparar scripts de runtime
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Permissões de storage e bootstrap/cache
 RUN chmod -R 775 storage bootstrap/cache \

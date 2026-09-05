@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div v-if="message" class="my-3 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start justify-between space-x-3 text-red-800 shadow-sm animate-fade-in">
         <div class="flex items-start space-x-2.5">
             <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

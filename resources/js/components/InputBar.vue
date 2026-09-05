@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div class="border-t border-gray-200 bg-white p-3 md:p-4 rounded-b-2xl shadow-sm">
         <!-- Barra de ferramentas superior ao input -->
         <div class="flex items-center justify-between mb-2 px-1 text-xs text-gray-500">

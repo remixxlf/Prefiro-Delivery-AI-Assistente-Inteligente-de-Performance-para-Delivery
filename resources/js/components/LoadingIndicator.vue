@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div class="flex items-start space-x-3 my-4 animate-fade-in">
         <!-- Avatar IA -->
         <div class="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-sm ring-2 ring-purple-100">

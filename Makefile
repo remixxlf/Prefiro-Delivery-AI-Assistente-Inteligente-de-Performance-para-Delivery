@@ -1,4 +1,4 @@
-﻿.PHONY: up down build shell artisan migrate seed fresh logs test
+.PHONY: up down build shell artisan migrate seed fresh logs test
 
 ## Subir containers
 up:

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div
         v-if="isOpen"
         class="fixed inset-0 z-50 overflow-y-auto bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fade-in"

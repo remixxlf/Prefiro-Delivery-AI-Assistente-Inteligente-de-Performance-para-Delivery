@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div class="min-h-screen bg-gray-100 flex flex-col font-sans">
         <!-- Top Navigation Bar -->
         <nav class="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-xs">

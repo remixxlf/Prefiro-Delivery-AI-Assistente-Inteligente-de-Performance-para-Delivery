@@ -1,4 +1,4 @@
-﻿# 📋 Resumo Executivo: O que o Sistema Realiza
+# 📋 Resumo Executivo: O que o Sistema Realiza
 
 > **Prefiro Delivery AI — Assistente Inteligente de Performance para Delivery**  
 > Documento síntese das funcionalidades, fluxo de processamento, regras de negócio e diferenciais do projeto.

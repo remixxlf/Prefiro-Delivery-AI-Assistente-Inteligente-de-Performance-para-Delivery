@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div :class="['flex items-start space-x-3 my-3', isUser ? 'justify-end' : 'justify-start']">
         <!-- Avatar IA (à esquerda) -->
         <div

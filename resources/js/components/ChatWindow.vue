@@ -1,4 +1,4 @@
-﻿<template>
+<template>
     <div class="flex flex-col h-full bg-gray-50 border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
         <!-- Cabeçalho do Chat -->
         <header class="flex items-center justify-between px-5 py-3.5 bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
