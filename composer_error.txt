@@ -239,7 +239,7 @@ Package operations: 116 installs, 0 updates, 0 removals
 Generating optimized autoload files
 > Illuminate\Foundation\ComposerScripts::postAutoloadDump
 > @php artisan package:discover --ansi
-﻿
+﻿﻿
 In PackageManifest.php line 179:
                                                                                
   The /home/runner/work/Prefiro-Delivery-AI-Assistente-Inteligente-de-Perform  
