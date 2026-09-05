@@ -113,8 +113,8 @@ class AIService
         $systemPrompt = $this->promptBuilder->getSystemPrompt();
         $userPrompt = $this->promptBuilder->buildUserPrompt($cleanQuestion, $contextData);
 
-        // 5. Executa a chamada ao provedor de IA configurado
-        $provider = config('ai.provider', 'openai');
+        // 5. Executa a chamada ao provedor de IA configurado (auto-detecta Gemini/OpenAI se chave existir)
+        $provider = $this->resolveProvider();
         $aiResult = $this->callProvider($provider, $systemPrompt, $userPrompt, $contextData);
 
         $endTime = microtime(true);
@@ -184,7 +184,7 @@ class AIService
         $systemPrompt = $this->promptBuilder->getSystemPrompt();
         $userPrompt = $this->promptBuilder->buildUserPrompt($cleanQuestion, $contextData);
 
-        $provider = config('ai.provider', 'openai');
+        $provider = $this->resolveProvider();
         $apiKey = config("ai.{$provider}.api_key");
 
         // Se tiver chave OpenAI e callback, faz stream real
@@ -292,6 +292,34 @@ class AIService
     }
 
     /**
+     * Resolve o provedor de IA com base nas chaves configuradas no ambiente.
+     */
+    public function resolveProvider(): string
+    {
+        $configured = config('ai.provider');
+
+        // Se o provedor explicitamente configurado tiver chave presente, usa ele
+        if (!empty($configured) && !empty(config("ai.{$configured}.api_key"))) {
+            return $configured;
+        }
+
+        // Auto-detecção inteligente de chaves disponíveis
+        if (!empty(config('ai.gemini.api_key'))) {
+            return 'gemini';
+        }
+
+        if (!empty(config('ai.openai.api_key'))) {
+            return 'openai';
+        }
+
+        if (!empty(config('ai.anthropic.api_key'))) {
+            return 'anthropic';
+        }
+
+        return $configured ?: 'openai';
+    }
+
+    /**
      * Despacha a chamada para o provedor configurado ou fallback.
      */
     protected function callProvider(string $provider, string $systemPrompt, string $userPrompt, array $contextData): array
@@ -309,7 +337,10 @@ class AIService
                 };
             } catch (\Throwable $e) {
                 Log::error("Erro na API de IA ({$provider}): " . $e->getMessage());
-                // Cai no motor determinístico com os dados reais do banco
+                $fallback = $this->generateDeterministicAnalysis($contextData, $userPrompt);
+                $fallback['error'] = "Falha ao consultar API {$provider}: " . $e->getMessage();
+                $fallback['text'] = "⚠️ *Aviso do Sistema: A chamada à API do {$provider} retornou erro (" . Str::limit($e->getMessage(), 150) . "). Resposta baseada no motor local do banco:* \n\n" . $fallback['text'];
+                return $fallback;
             }
         }
 
@@ -369,7 +400,7 @@ class AIService
         $model = config('ai.gemini.model', 'gemini-1.5-flash');
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
 
-        $response = Http::timeout(30)->post($url, [
+        $payload = [
             'system_instruction' => [
                 'parts' => [['text' => $systemPrompt]],
             ],
@@ -379,10 +410,22 @@ class AIService
                     'parts' => [['text' => $userPrompt]],
                 ],
             ],
-        ]);
+        ];
+
+        $response = Http::timeout(30)->post($url, $payload);
+
+        // Se falhar com 404 (modelo descontinuado/não encontrado), tenta gemini-2.0-flash
+        if (!$response->successful() && $response->status() === 404) {
+            $fallbackUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$apiKey}";
+            $retry = Http::timeout(30)->post($fallbackUrl, $payload);
+            if ($retry->successful()) {
+                $response = $retry;
+                $model = 'gemini-2.0-flash';
+            }
+        }
 
         if (!$response->successful()) {
-            throw new \RuntimeException("Gemini API Error: " . $response->body());
+            throw new \RuntimeException("Gemini API Error ({$response->status()}): " . $response->body());
         }
 
         $json = $response->json();

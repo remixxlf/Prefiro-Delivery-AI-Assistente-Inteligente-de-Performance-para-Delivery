@@ -6,8 +6,13 @@ return [
     | Provedor de IA padrão
     |--------------------------------------------------------------------------
     | Suporte: "openai" | "gemini" | "anthropic"
+    | Auto-detecta: Se GEMINI_API_KEY for definida, usa gemini automaticamente.
     */
-    'provider' => env('AI_PROVIDER', 'openai'),
+    'provider' => env('AI_PROVIDER') ?: (
+        (env('GEMINI_API_KEY') || env('GOOGLE_API_KEY') || env('GEMINI_KEY')) ? 'gemini' : (
+            env('ANTHROPIC_API_KEY') ? 'anthropic' : 'openai'
+        )
+    ),
 
     /*
     |--------------------------------------------------------------------------
@@ -15,7 +20,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'openai' => [
-        'api_key' => env('OPENAI_API_KEY'),
+        'api_key' => env('OPENAI_API_KEY', env('OPENAI_KEY')),
         'model'   => env('OPENAI_MODEL', 'gpt-4o-mini'),
         'max_tokens'  => (int) env('OPENAI_MAX_TOKENS', 2000),
         'temperature' => (float) env('OPENAI_TEMPERATURE', 0.3),
@@ -27,7 +32,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'gemini' => [
-        'api_key' => env('GEMINI_API_KEY'),
+        'api_key' => env('GEMINI_API_KEY', env('GOOGLE_API_KEY', env('GEMINI_KEY'))),
         'model'   => env('GEMINI_MODEL', 'gemini-1.5-flash'),
     ],
 
