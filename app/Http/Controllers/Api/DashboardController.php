@@ -81,7 +81,7 @@ class DashboardController extends Controller
                 'groq_key_prefix'   => !empty($groqKey) ? substr($groqKey, 0, 7) . '...' : null,
                 'has_gemini_key'    => !empty($geminiKey),
                 'has_openai_key'    => !empty($openaiKey),
-                'groq_model'        => config('ai.groq.model'),
+                'groq_model'        => \Illuminate\Support\Facades\Cache::get('groq_active_working_model') ?: config('ai.groq.model'),
             ];
 
             return response()->json([

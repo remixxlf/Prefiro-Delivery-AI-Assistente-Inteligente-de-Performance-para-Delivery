@@ -377,7 +377,7 @@ class AIService
             try {
                 return match ($provider) {
                     'openai'     => $this->callOpenAI($apiKey, $systemPrompt, $userPrompt),
-                    'groq'       => $this->callOpenAICompatible('groq', $apiKey, config('ai.groq.base_url', 'https://api.groq.com/openai/v1'), config('ai.groq.model', 'deepseek-r1-distill-llama-70b'), $systemPrompt, $userPrompt),
+                    'groq'       => $this->callOpenAICompatible('groq', $apiKey, config('ai.groq.base_url', 'https://api.groq.com/openai/v1'), config('ai.groq.model', 'openai/gpt-oss-120b'), $systemPrompt, $userPrompt),
                     'openrouter' => $this->callOpenAICompatible('openrouter', $apiKey, config('ai.openrouter.base_url', 'https://openrouter.ai/api/v1'), config('ai.openrouter.model', 'deepseek/deepseek-r1:free'), $systemPrompt, $userPrompt),
                     'gemini'     => $this->callGemini($apiKey, $systemPrompt, $userPrompt),
                     'anthropic'  => $this->callAnthropic($apiKey, $systemPrompt, $userPrompt),
@@ -405,6 +405,22 @@ class AIService
     {
         $url = rtrim($baseUrl, '/') . '/chat/completions';
 
+        // Prevenção inteligente para Groq: se o modelo for nulo ou antigo/descomissionado, usa o modelo ativo
+        if ($provider === 'groq') {
+            $cachedModel = Cache::get('groq_active_working_model');
+            if (!empty($cachedModel)) {
+                $model = $cachedModel;
+            } elseif (
+                empty($model) ||
+                str_contains($model, 'deepseek-r1') ||
+                str_contains($model, 'llama-3.1-70b') ||
+                str_contains($model, 'llama-3.1-8b') ||
+                str_contains($model, 'llama-3.3-70b')
+            ) {
+                $model = 'openai/gpt-oss-120b';
+            }
+        }
+
         $payload = [
             'model'       => $model,
             'temperature' => 0.3,
@@ -417,42 +433,70 @@ class AIService
 
         $response = Http::withToken($apiKey)->timeout(40)->post($url, $payload);
 
-        // Se o modelo não existir no Groq (404), busca lista de modelos ativos dinamicamente
-        if (!$response->successful() && $response->status() === 404 && $provider === 'groq') {
-            $fallbackModels = [
-                'deepseek-r1-distill-llama-70b',
-                'deepseek-r1-distill-qwen-32b',
-                'qwen-2.5-32b',
-                'llama-3.1-70b-versatile',
-            ];
+        // Se a chamada falhar no Groq (ex: status 400 por modelo descomissionado, 404, etc),
+        // recupera dinamicamente a lista de modelos ativos da conta via /models
+        if (!$response->successful() && $provider === 'groq') {
+            $respBody = strtolower($response->body());
+            $isModelIssue = $response->status() === 400
+                || $response->status() === 404
+                || str_contains($respBody, 'decommissioned')
+                || str_contains($respBody, 'model')
+                || str_contains($respBody, 'not supported')
+                || str_contains($respBody, 'does not exist');
 
-            // Tenta consultar dinamicamente a lista de modelos da conta
-            try {
-                $modelsResp = Http::withToken($apiKey)->timeout(10)->get(rtrim($baseUrl, '/') . '/models');
-                if ($modelsResp->successful()) {
-                    $available = collect($modelsResp->json('data', []))
-                        ->pluck('id')
-                        ->filter(fn ($id) => !str_contains($id, 'whisper') && !str_contains($id, 'guard') && !str_contains($id, 'vision'))
-                        ->values()
-                        ->toArray();
+            if ($isModelIssue) {
+                Log::channel('ai_errors')->warning("Modelo Groq '{$model}' falhou ({$response->status()}). Buscando modelos disponíveis...");
 
-                    if (!empty($available)) {
-                        $fallbackModels = array_values(array_unique(array_merge($fallbackModels, $available)));
+                $candidateModels = [
+                    'openai/gpt-oss-120b',
+                    'openai/gpt-oss-20b',
+                    'qwen/qwen3.6-27b',
+                ];
+
+                // Consulta dinamicamente a lista oficial de modelos ativos retornados pela API do Groq
+                try {
+                    $modelsResp = Http::withToken($apiKey)->timeout(10)->get(rtrim($baseUrl, '/') . '/models');
+                    if ($modelsResp->successful()) {
+                        $remoteModels = collect($modelsResp->json('data', []))
+                            ->pluck('id')
+                            ->filter(fn ($id) =>
+                                is_string($id) &&
+                                !str_contains($id, 'whisper') &&
+                                !str_contains($id, 'guard') &&
+                                !str_contains($id, 'vision') &&
+                                !str_contains($id, 'embed') &&
+                                !str_contains($id, 'distill-llama-70b') &&
+                                !str_contains($id, 'distill-qwen-32b')
+                            )
+                            ->values()
+                            ->toArray();
+
+                        if (!empty($remoteModels)) {
+                            $candidateModels = array_values(array_unique(array_merge($candidateModels, $remoteModels)));
+                        }
                     }
+                } catch (\Throwable $e) {
+                    Log::channel('ai_errors')->warning("Falha ao consultar /models no Groq: " . $e->getMessage());
                 }
-            } catch (\Throwable $e) {
-                // segue com os modelos candidatos
-            }
 
-            foreach ($fallbackModels as $candidate) {
-                if ($candidate === $model) continue;
+                foreach ($candidateModels as $candidate) {
+                    if ($candidate === $model) {
+                        continue;
+                    }
 
-                $payload['model'] = $candidate;
-                $retry = Http::withToken($apiKey)->timeout(40)->post($url, $payload);
-                if ($retry->successful()) {
-                    $response = $retry;
-                    $model = $candidate;
-                    break;
+                    $payload['model'] = $candidate;
+                    try {
+                        $retry = Http::withToken($apiKey)->timeout(40)->post($url, $payload);
+                        if ($retry->successful()) {
+                            $response = $retry;
+                            $model = $candidate;
+                            Cache::put('groq_active_working_model', $candidate, now()->addDays(7));
+                            Log::info("Modelo Groq recuperado com sucesso: {$candidate}");
+                            break;
+                        }
+                    } catch (\Throwable $e) {
+                        // continua para o próximo candidato
+                    }
                 }
             }
         }
@@ -463,6 +507,10 @@ class AIService
 
         $json = $response->json();
         $text = $json['choices'][0]['message']['content'] ?? '';
+        if (empty($text) && !empty($json['choices'][0]['message']['reasoning_content'])) {
+            $text = $json['choices'][0]['message']['reasoning_content'];
+        }
+
         $tokensIn = $json['usage']['prompt_tokens'] ?? 0;
         $tokensOut = $json['usage']['completion_tokens'] ?? 0;
         $tokensTotal = $json['usage']['total_tokens'] ?? ($tokensIn + $tokensOut);

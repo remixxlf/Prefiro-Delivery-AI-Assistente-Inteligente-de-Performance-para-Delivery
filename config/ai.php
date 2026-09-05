@@ -26,10 +26,11 @@ return [
     */
     'groq' => [
         'api_key'  => env('GROQ_API_KEY', env('GROK_API_KEY', env('GROQ_KEY', env('GROK_KEY', getenv('GROQ_API_KEY') ?: getenv('GROK_API_KEY'))))),
-        // Modelos gratuitos no Groq:
-        // - deepseek-r1-distill-llama-70b (DeepSeek R1 Oficial no Groq)
-        // - deepseek-r1-distill-qwen-32b
-        'model'    => env('GROQ_MODEL', env('GROK_MODEL', 'deepseek-r1-distill-llama-70b')),
+        // Modelos de produção no Groq:
+        // - openai/gpt-oss-120b (Recomendado - 117B MoE ultrarrápido)
+        // - openai/gpt-oss-20b (Ultra-baixa latência)
+        // - qwen/qwen3.6-27b
+        'model'    => env('GROQ_MODEL', env('GROK_MODEL', 'openai/gpt-oss-120b')),
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     ],
 

@@ -8,7 +8,7 @@ export CACHE_DRIVER="file"
 export SESSION_DRIVER="file"
 export QUEUE_CONNECTION="sync"
 export DB_CONNECTION="sqlite"
-export GROQ_MODEL="${GROQ_MODEL:-deepseek-r1-distill-llama-70b}"
+export GROQ_MODEL="${GROQ_MODEL:-openai/gpt-oss-120b}"
 
 # Configura .env padrão caso não exista
 if [ ! -f .env ]; then
@@ -36,6 +36,14 @@ for var in GROQ_API_KEY GROK_API_KEY GEMINI_API_KEY GOOGLE_API_KEY OPENAI_API_KE
         export $var="$val"
     fi
 done
+
+# Se GROQ_MODEL estiver configurado para modelo descontinuado pelo Groq, atualiza automaticamente
+if [ "$GROQ_MODEL" = "deepseek-r1-distill-llama-70b" ] || [ "$GROQ_MODEL" = "deepseek-r1-distill-qwen-32b" ] || [ "$GROQ_MODEL" = "llama-3.1-70b-versatile" ] || [ "$GROQ_MODEL" = "llama-3.1-8b-instant" ]; then
+    export GROQ_MODEL="openai/gpt-oss-120b"
+fi
+sed -i 's/deepseek-r1-distill-llama-70b/openai\/gpt-oss-120b/g' .env 2>/dev/null || true
+sed -i 's/deepseek-r1-distill-qwen-32b/openai\/gpt-oss-120b/g' .env 2>/dev/null || true
+sed -i 's/llama-3.1-70b-versatile/openai\/gpt-oss-120b/g' .env 2>/dev/null || true
 
 # Configura SQLite
 if grep -q "DB_CONNECTION=sqlite" .env || [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
