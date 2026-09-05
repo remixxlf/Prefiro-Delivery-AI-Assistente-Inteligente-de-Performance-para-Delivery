@@ -71,9 +71,22 @@ class DashboardController extends Controller
         try {
             $metrics = \App\Services\AI\AIService::getObservabilityMetrics();
 
+            $groqKey = config('ai.groq.api_key') ?: getenv('GROQ_API_KEY') ?: getenv('GROK_API_KEY');
+            $geminiKey = config('ai.gemini.api_key') ?: getenv('GEMINI_API_KEY') ?: getenv('GOOGLE_API_KEY');
+            $openaiKey = config('ai.openai.api_key') ?: getenv('OPENAI_API_KEY');
+
+            $diagnostics = [
+                'resolved_provider' => app(\App\Services\AI\AIService::class)->resolveProvider(),
+                'has_groq_key'      => !empty($groqKey),
+                'groq_key_prefix'   => !empty($groqKey) ? substr($groqKey, 0, 7) . '...' : null,
+                'has_gemini_key'    => !empty($geminiKey),
+                'has_openai_key'    => !empty($openaiKey),
+                'groq_model'        => config('ai.groq.model'),
+            ];
+
             return response()->json([
                 'status' => 'success',
-                'data'   => $metrics,
+                'data'   => array_merge($metrics, ['diagnostics' => $diagnostics]),
             ]);
         } catch (\Throwable $e) {
             Log::channel('ai_errors')->error("DashboardController@observability falhou: {$e->getMessage()}");

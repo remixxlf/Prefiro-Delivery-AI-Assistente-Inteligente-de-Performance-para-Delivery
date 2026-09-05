@@ -6,13 +6,13 @@ return [
     | Provedor de IA padrão
     |--------------------------------------------------------------------------
     | Suporte: "groq" | "openrouter" | "gemini" | "openai" | "anthropic"
-    | Auto-detecta qualquer chave configurada no ambiente.
+    | Auto-detecta qualquer chave configurada no ambiente (incluindo variações com K ou Q).
     */
     'provider' => env('AI_PROVIDER') ?: (
-        env('GROQ_API_KEY') ? 'groq' : (
-            env('OPENROUTER_API_KEY') ? 'openrouter' : (
-                (env('GEMINI_API_KEY') || env('GOOGLE_API_KEY') || env('GEMINI_KEY')) ? 'gemini' : (
-                    env('ANTHROPIC_API_KEY') ? 'anthropic' : 'openai'
+        (env('GROQ_API_KEY') || env('GROK_API_KEY') || env('GROQ_KEY') || env('GROK_KEY') || getenv('GROQ_API_KEY') || getenv('GROK_API_KEY')) ? 'groq' : (
+            (env('OPENROUTER_API_KEY') || getenv('OPENROUTER_API_KEY')) ? 'openrouter' : (
+                (env('GEMINI_API_KEY') || env('GOOGLE_API_KEY') || env('GEMINI_KEY') || getenv('GEMINI_API_KEY')) ? 'gemini' : (
+                    (env('ANTHROPIC_API_KEY') || getenv('ANTHROPIC_API_KEY')) ? 'anthropic' : 'openai'
                 )
             )
         )
@@ -25,11 +25,11 @@ return [
     |--------------------------------------------------------------------------
     */
     'groq' => [
-        'api_key'  => env('GROQ_API_KEY'),
+        'api_key'  => env('GROQ_API_KEY', env('GROK_API_KEY', env('GROQ_KEY', env('GROK_KEY', getenv('GROQ_API_KEY') ?: getenv('GROK_API_KEY'))))),
         // Modelos gratuitos no Groq:
         // - llama-3.3-70b-versatile (Recomendado, nível GPT-4)
         // - deepseek-r1-distill-llama-70b (Raciocínio DeepSeek)
-        'model'    => env('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+        'model'    => env('GROQ_MODEL', env('GROK_MODEL', 'llama-3.3-70b-versatile')),
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     ],
 

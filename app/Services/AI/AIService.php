@@ -259,6 +259,27 @@ class AIService
         $aiResult = $this->callProvider($provider, $systemPrompt, $userPrompt, $contextData);
         $fullText = $aiResult['text'];
 
+        $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+
+        $this->logConversation([
+            'session_id'       => $sessionId,
+            'question'         => $cleanQuestion,
+            'context_data'     => $contextData,
+            'prompt_sent'      => $userPrompt,
+            'response'         => $fullText,
+            'intent'           => $intent,
+            'provider'         => $aiResult['provider'] ?? $provider,
+            'model'            => $aiResult['model'] ?? 'unknown',
+            'tokens_input'     => $aiResult['tokens_input'] ?? 0,
+            'tokens_output'    => $aiResult['tokens_output'] ?? 0,
+            'tokens_total'     => $aiResult['tokens_total'] ?? 0,
+            'cost_usd'         => $aiResult['cost_usd'] ?? 0.0,
+            'response_time_ms' => $durationMs,
+            'status'           => $aiResult['status'] ?? AiConversation::STATUS_SUCCESS,
+            'error_message'    => $aiResult['error'] ?? null,
+            'was_streamed'     => true,
+        ]);
+
         if (is_callable($chunkCallback)) {
             $words = explode(' ', $fullText);
             foreach ($words as $word) {
@@ -303,24 +324,29 @@ class AIService
             return $configured;
         }
 
-        // Auto-detecção inteligente de chaves disponíveis
-        if (!empty(config('ai.groq.api_key'))) {
+        // Auto-detecção inteligente de chaves disponíveis (suporta config e getenv direto)
+        $groqKey = config('ai.groq.api_key') ?: getenv('GROQ_API_KEY') ?: getenv('GROK_API_KEY');
+        if (!empty($groqKey)) {
             return 'groq';
         }
 
-        if (!empty(config('ai.openrouter.api_key'))) {
+        $openRouterKey = config('ai.openrouter.api_key') ?: getenv('OPENROUTER_API_KEY');
+        if (!empty($openRouterKey)) {
             return 'openrouter';
         }
 
-        if (!empty(config('ai.gemini.api_key'))) {
+        $geminiKey = config('ai.gemini.api_key') ?: getenv('GEMINI_API_KEY') ?: getenv('GOOGLE_API_KEY');
+        if (!empty($geminiKey)) {
             return 'gemini';
         }
 
-        if (!empty(config('ai.openai.api_key'))) {
+        $openaiKey = config('ai.openai.api_key') ?: getenv('OPENAI_API_KEY');
+        if (!empty($openaiKey)) {
             return 'openai';
         }
 
-        if (!empty(config('ai.anthropic.api_key'))) {
+        $anthropicKey = config('ai.anthropic.api_key') ?: getenv('ANTHROPIC_API_KEY');
+        if (!empty($anthropicKey)) {
             return 'anthropic';
         }
 
@@ -334,7 +360,19 @@ class AIService
     {
         $apiKey = config("ai.{$provider}.api_key");
 
-        // Se tiver chave de API real no .env, tenta chamada externa
+        // Se a chave configurada estiver vazia, tenta buscar diretamente das variáveis do container
+        if (empty($apiKey)) {
+            $apiKey = match ($provider) {
+                'groq'       => getenv('GROQ_API_KEY') ?: getenv('GROK_API_KEY'),
+                'gemini'     => getenv('GEMINI_API_KEY') ?: getenv('GOOGLE_API_KEY'),
+                'openai'     => getenv('OPENAI_API_KEY'),
+                'openrouter' => getenv('OPENROUTER_API_KEY'),
+                'anthropic'  => getenv('ANTHROPIC_API_KEY'),
+                default      => null,
+            };
+        }
+
+        // Se tiver chave de API real no .env ou ambiente, tenta chamada externa
         if (!empty($apiKey)) {
             try {
                 return match ($provider) {
@@ -355,8 +393,9 @@ class AIService
         }
 
         // Motor Analítico Determinístico Baseado nos Dados Reais
-        // Garante que o sistema funciona e é 100% testável mesmo sem chaves externas cadastradas no ambiente
-        return $this->generateDeterministicAnalysis($contextData, $userPrompt);
+        $fallback = $this->generateDeterministicAnalysis($contextData, $userPrompt);
+        $fallback['text'] = "ℹ️ *[Aviso: Nenhuma chave de IA detectada pelo servidor]*: Configure `GROQ_API_KEY` no painel do Render para ativar as respostas da LLM em tempo real. Respondendo com motor analítico local:\n\n" . $fallback['text'];
+        return $fallback;
     }
 
     /**

@@ -23,6 +23,19 @@ sed -i 's/QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/g' .env
 sed -i 's|^APP_KEY=$|APP_KEY=base64:u1+Z5v/Oq4mG1aE6rW8tN0xY9pL2kJ3bV4cF5eR7tP8=|g' .env
 grep -q "CACHE_STORE=" .env && sed -i 's/CACHE_STORE=.*/CACHE_STORE=file/g' .env || echo "CACHE_STORE=file" >> .env
 
+# Sincroniza chaves de IA do ambiente do container (Render) diretamente para o .env
+for var in GROQ_API_KEY GROK_API_KEY GEMINI_API_KEY GOOGLE_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY AI_PROVIDER GROQ_MODEL GROK_MODEL; do
+    eval val=\$$var
+    if [ -n "$val" ]; then
+        if [ "$var" = "GROK_API_KEY" ]; then
+            grep -q "^GROQ_API_KEY=" .env && sed -i "s|^GROQ_API_KEY=.*|GROQ_API_KEY=$val|g" .env || echo "GROQ_API_KEY=$val" >> .env
+            export GROQ_API_KEY="$val"
+        fi
+        grep -q "^$var=" .env && sed -i "s|^$var=.*|$var=$val|g" .env || echo "$var=$val" >> .env
+        export $var="$val"
+    fi
+done
+
 # Configura SQLite
 if grep -q "DB_CONNECTION=sqlite" .env || [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
     mkdir -p database
