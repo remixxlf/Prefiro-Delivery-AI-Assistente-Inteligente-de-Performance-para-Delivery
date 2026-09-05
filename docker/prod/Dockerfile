@@ -43,7 +43,8 @@ COPY --from=frontend /app/public/build ./public/build
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --ignore-platform-reqs
 
 # Permissões de storage e bootstrap/cache
-RUN chmod -R 775 storage bootstrap/cache \
+RUN mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/logs bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache \
     && chmod +x docker/prod/entrypoint.sh
 
 EXPOSE 8000
