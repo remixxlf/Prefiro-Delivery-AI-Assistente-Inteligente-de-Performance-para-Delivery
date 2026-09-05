@@ -228,6 +228,7 @@ export const useChatStore = defineStore("chat", {
         async generateCampaign(days = 30, goal = null) {
             this.isLoading = true;
             this.error = null;
+            if (!this.sessionId) this.initSession();
 
             try {
                 const response = await axios.post("/campaigns", {
@@ -236,8 +237,20 @@ export const useChatStore = defineStore("chat", {
                     session_id: this.sessionId,
                 });
 
-                if (response.data?.status === "success") {
-                    const d = response.data.data;
+                let resData = response.data;
+                if (typeof resData === "string") {
+                    try {
+                        resData = JSON.parse(resData.replace(/^\uFEFF+/, ""));
+                    } catch (e) {
+                        console.error("Erro ao fazer parse da resposta de campanha:", e);
+                    }
+                }
+
+                if (resData?.status === "success") {
+                    const d = resData.data;
+                    if (d.session_id) {
+                        this.sessionId = d.session_id;
+                    }
                     this.messages.push({
                         id: "ai_camp_" + Date.now(),
                         sender: "assistant",
@@ -251,9 +264,14 @@ export const useChatStore = defineStore("chat", {
                         created_at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
                     });
                     return d;
+                } else {
+                    const errorMsg = resData?.message || "Falha ao gerar campanha.";
+                    this.error = errorMsg;
+                    throw new Error(errorMsg);
                 }
             } catch (err) {
                 this.handleApiError(err);
+                throw err;
             } finally {
                 this.isLoading = false;
             }

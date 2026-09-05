@@ -83,7 +83,7 @@ class CustomerRepository
 
         return $records->map(function (Customer $customer) {
             $daysSinceLastOrder = $customer->last_order_at
-                ? Carbon::now()->diffInDays($customer->last_order_at)
+                ? (int) abs(Carbon::now()->diffInDays($customer->last_order_at))
                 : null;
 
             $totalSpent = (float) ($customer->orders_sum_total ?? 0);
@@ -97,6 +97,8 @@ class CustomerRepository
                 'first_order_at'        => $customer->first_order_at?->format('Y-m-d H:i:s'),
                 'last_order_at'         => $customer->last_order_at?->format('Y-m-d H:i:s'),
                 'days_since_last_order' => $daysSinceLastOrder,
+                'total_orders'          => $totalOrders,
+                'total_spent'           => round($totalSpent, 2),
                 'lifetime_orders'       => $totalOrders,
                 'lifetime_spent'        => round($totalSpent, 2),
                 'average_ticket'        => $avgTicket,

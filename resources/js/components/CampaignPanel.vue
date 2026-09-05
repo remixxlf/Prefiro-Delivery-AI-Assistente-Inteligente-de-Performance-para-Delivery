@@ -31,6 +31,17 @@
                         O sistema consulta o banco de dados para identificar exatamente os clientes inativos e utiliza a IA para criar textos persuasivos de reativação (WhatsApp/SMS e Push).
                     </p>
 
+                    <!-- Alerta de Erro -->
+                    <div v-if="errorMessage" class="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start justify-between">
+                        <div class="flex items-center space-x-2">
+                            <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>{{ errorMessage }}</span>
+                        </div>
+                        <button @click="errorMessage = null" class="text-red-400 hover:text-red-600 font-bold ml-2">✕</button>
+                    </div>
+
                     <div class="space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
                         <div>
                             <label class="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -163,6 +174,7 @@ const days = ref(30);
 const goal = ref("");
 const isGenerating = ref(false);
 const resultData = ref(null);
+const errorMessage = ref(null);
 const copied = ref(false);
 
 const closePanel = () => {
@@ -172,6 +184,7 @@ const closePanel = () => {
         goal.value = "";
         resultData.value = null;
         isGenerating.value = false;
+        errorMessage.value = null;
         copied.value = false;
     }, 200);
     emit("close");
@@ -179,11 +192,16 @@ const closePanel = () => {
 
 const handleGenerate = async () => {
     isGenerating.value = true;
+    errorMessage.value = null;
     try {
-        const result = await chatStore.generateCampaign(days.value, goal.value || null);
+        const result = await chatStore.generateCampaign(Number(days.value), goal.value || null);
         if (result) {
             resultData.value = result;
+        } else if (chatStore.error) {
+            errorMessage.value = chatStore.error;
         }
+    } catch (e) {
+        errorMessage.value = chatStore.error || e.message || "Ocorreu uma falha ao gerar a campanha com IA. Tente novamente.";
     } finally {
         isGenerating.value = false;
     }

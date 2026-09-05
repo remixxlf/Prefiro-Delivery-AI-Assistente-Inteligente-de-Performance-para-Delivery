@@ -41,8 +41,9 @@ class CampaignService
         // Se não houver clientes inativos suficientes, pode lançar uma exception leve ou continuar
         // Aqui optamos por seguir para demonstrar o poder da IA, mas o prompt receberá 0 clientes.
         
-        // 2. Define o comando para a IA baseado no objetivo
-        $question = $customGoal ?: "Crie uma campanha para clientes que não compram há mais de {$days} dias.";
+        // 2. Define o comando para a IA preservando a intenção de campanha e o objetivo informado
+        $question = "Crie uma campanha de reativação para clientes que não compram há mais de {$days} dias."
+            . ($customGoal ? " Objetivo e oferta da campanha: {$customGoal}." : "");
 
         // 3. Executa a geração chamando a API de IA
         $aiResult = $this->aiService->ask($question, $sessionId);

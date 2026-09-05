@@ -165,9 +165,13 @@ class AnalyticsService
         $inactiveCount = $this->customerRepo->getInactiveCustomersCount($daysThreshold);
         $sample = $this->customerRepo->getInactiveCustomers($daysThreshold, $sampleLimit);
 
-        // Ticket médio estimado
+        // Ticket médio estimado dos clientes inativos
+        $totalSpent = array_sum(array_column($sample, 'total_spent')) ?: array_sum(array_column($sample, 'lifetime_spent'));
+        $totalOrders = array_sum(array_column($sample, 'total_orders')) ?: array_sum(array_column($sample, 'lifetime_orders'));
         $avgTicket = (float) round(
-            count($sample) > 0 ? (array_sum(array_column($sample, 'total_spent')) / max(1, array_sum(array_column($sample, 'total_orders')))) : 50.00,
+            $totalOrders > 0 ? ($totalSpent / $totalOrders) : (
+                count($sample) > 0 ? (array_sum(array_column($sample, 'average_ticket')) / count($sample)) : 65.00
+            ),
             2
         );
 
