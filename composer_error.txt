@@ -239,5 +239,12 @@ Package operations: 116 installs, 0 updates, 0 removals
 Generating optimized autoload files
 > Illuminate\Foundation\ComposerScripts::postAutoloadDump
 > @php artisan package:discover --ansi
-Could not open input file: artisan
+
+In PackageManifest.php line 179:
+                                                                               
+  The /home/runner/work/Prefiro-Delivery-AI-Assistente-Inteligente-de-Perform  
+  ance-para-Delivery/Prefiro-Delivery-AI-Assistente-Inteligente-de-Performanc  
+  e-para-Delivery/bootstrap/cache directory must be present and writable.      
+                                                                               
+
 Script @php artisan package:discover --ansi handling the post-autoload-dump event returned with error code 1
