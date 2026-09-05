@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,9 +23,8 @@ jobs:
         tools: composer:v2
 
     - name: Run Composer Update
-      continue-on-error: true
       run: |
-        composer update --no-interaction > composer_error.txt 2>&1
+        composer update --no-interaction > composer_error.txt 2>&1 || true
         cat composer_error.txt
 
     - name: Commit error log
