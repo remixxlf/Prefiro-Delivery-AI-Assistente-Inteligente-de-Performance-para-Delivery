@@ -7,6 +7,8 @@ if [ ! -f .env ]; then
     php artisan key:generate --force
     
     # Força configurações para rodar num único container (sem MySQL/Redis externo)
+    sed -i 's/APP_ENV=local/APP_ENV=production/g' .env
+    sed -i 's/APP_DEBUG=true/APP_DEBUG=false/g' .env
     sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' .env
     sed -i 's/CACHE_DRIVER=redis/CACHE_DRIVER=file/g' .env
     sed -i 's/SESSION_DRIVER=redis/SESSION_DRIVER=file/g' .env
@@ -30,4 +32,4 @@ php artisan migrate --force --seed --graceful || true
 # Inicia servidor web na porta informada pelo Render ($PORT)
 PORT="${PORT:-8000}"
 echo "=== Prefiro Delivery AI rodando na porta $PORT ==="
-exec php -S 0.0.0.0:"$PORT" -t public
+exec php artisan serve --host=0.0.0.0 --port="$PORT"
