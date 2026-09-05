@@ -25,13 +25,13 @@ jobs:
     - name: Run Composer Update
       run: |
         composer update --no-interaction > composer_error.txt 2>&1 || true
-        cat composer_error.txt
 
     - name: Commit error log
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add composer_error.txt composer.lock || true
+        git add composer_error.txt
+        if [ -f composer.lock ]; then git add composer.lock; fi
         git commit -m "chore: add composer log" || echo "No changes"
         git push
 
