@@ -1,20 +1,18 @@
-﻿#!/bin/sh
+#!/bin/sh
 set -e
 
-# Cria sqlite se não houver banco externo configurado
-if [ "$DB_CONNECTION" = "sqlite" ] && [ ! -f "database/database.sqlite" ]; then
+# Configura SQLite se for o banco selecionado
+if [ "$DB_CONNECTION" = "sqlite" ]; then
+    mkdir -p database
     touch database/database.sqlite
+    chmod 666 database/database.sqlite
+    chmod 777 database
 fi
 
-# Executa migrations
-php artisan migrate --force --graceful
+# Executa migrations e seeders
+php artisan migrate --force --seed --graceful || true
 
-# Otimiza caches para produção
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-
-# Inicia o servidor embutido do PHP na porta configurada pelo ambiente
+# Inicia servidor web na porta informada pelo Render ($PORT)
 PORT="${PORT:-8000}"
-echo "Iniciando Prefiro Delivery AI na porta $PORT..."
+echo "=== Prefiro Delivery AI rodando na porta $PORT ==="
 exec php -S 0.0.0.0:"$PORT" -t public
