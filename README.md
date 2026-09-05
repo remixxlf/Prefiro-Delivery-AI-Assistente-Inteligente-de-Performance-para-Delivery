@@ -1,4 +1,4 @@
-﻿# 🚀 Prefiro Delivery AI — Assistente Inteligente de Performance para Delivery
+# 🚀 Prefiro Delivery AI — Assistente Inteligente de Performance para Delivery
 
 > **Teste Técnico — Desenvolvedor Full Stack + IA | Prefiro Delivery**  
 > Solução completa, segura e escalável para análise de performance de restaurantes delivery via Inteligência Artificial, construída com **Laravel 11**, **Vue.js 3**, **MySQL 8** e **Redis**.
@@ -147,8 +147,8 @@ Com base nisso, a IA responde com precisão milimétrica:
 
 1. **Clone o repositório**:
    ```bash
-   git clone https://github.com/Remixxlf/prefiro-delivery.git
-   cd prefiro-delivery
+   git clone https://github.com/remixxlf/Prefiro-Delivery-AI-Assistente-Inteligente-de-Performance-para-Delivery.git
+   cd Prefiro-Delivery-AI-Assistente-Inteligente-de-Performance-para-Delivery
    ```
 
 2. **Copie o arquivo de ambiente**:
@@ -382,5 +382,5 @@ Com mais tempo de desenvolvimento, implementaria as seguintes melhorias estraté
 ## 👨‍💻 Autor
 
 - **Candidato:** Luis Filipe S. Lima
-- **Repositório:** [https://github.com/Remixxlf/prefiro-delivery](https://github.com/Remixxlf/prefiro-delivery)
+- **Repositório:** [https://github.com/remixxlf/Prefiro-Delivery-AI-Assistente-Inteligente-de-Performance-para-Delivery](https://github.com/remixxlf/Prefiro-Delivery-AI-Assistente-Inteligente-de-Performance-para-Delivery)
 - **Tecnologias:** Laravel 11 • Vue.js 3 • MySQL 8 • Redis • OpenAI GPT-4o-mini • Docker
