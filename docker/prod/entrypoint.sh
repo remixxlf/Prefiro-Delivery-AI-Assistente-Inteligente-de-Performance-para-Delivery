@@ -1,8 +1,20 @@
 #!/bin/sh
 set -e
 
-# Configura SQLite se for o banco selecionado
-if [ "$DB_CONNECTION" = "sqlite" ]; then
+# Configura .env padrão caso não exista
+if [ ! -f .env ]; then
+    cp .env.example .env
+    php artisan key:generate --force
+    
+    # Força configurações para rodar num único container (sem MySQL/Redis externo)
+    sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' .env
+    sed -i 's/CACHE_DRIVER=redis/CACHE_DRIVER=file/g' .env
+    sed -i 's/SESSION_DRIVER=redis/SESSION_DRIVER=file/g' .env
+    sed -i 's/QUEUE_CONNECTION=redis/QUEUE_CONNECTION=sync/g' .env
+fi
+
+# Configura SQLite
+if grep -q "DB_CONNECTION=sqlite" .env || [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
     mkdir -p database
     touch database/database.sqlite
     chmod 666 database/database.sqlite
