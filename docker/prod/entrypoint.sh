@@ -1,8 +1,13 @@
 #!/bin/sh
 set -e
 
-# Garante APP_KEY exportada para o ambiente do container
+# Garante variáveis de ambiente críticas exportadas para o container
 export APP_KEY="${APP_KEY:-base64:u1+Z5v/Oq4mG1aE6rW8tN0xY9pL2kJ3bV4cF5eR7tP8=}"
+export CACHE_STORE="file"
+export CACHE_DRIVER="file"
+export SESSION_DRIVER="file"
+export QUEUE_CONNECTION="sync"
+export DB_CONNECTION="sqlite"
 
 # Configura .env padrão caso não exista
 if [ ! -f .env ]; then
@@ -12,10 +17,11 @@ fi
 # Força configurações para rodar num único container (sem MySQL/Redis externo)
 sed -i 's/APP_ENV=local/APP_ENV=production/g' .env
 sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/g' .env
-sed -i 's/CACHE_DRIVER=redis/CACHE_DRIVER=file/g' .env
-sed -i 's/SESSION_DRIVER=redis/SESSION_DRIVER=file/g' .env
-sed -i 's/QUEUE_CONNECTION=redis/QUEUE_CONNECTION=sync/g' .env
+sed -i 's/CACHE_DRIVER=.*/CACHE_DRIVER=file/g' .env
+sed -i 's/SESSION_DRIVER=.*/SESSION_DRIVER=file/g' .env
+sed -i 's/QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/g' .env
 sed -i 's|^APP_KEY=$|APP_KEY=base64:u1+Z5v/Oq4mG1aE6rW8tN0xY9pL2kJ3bV4cF5eR7tP8=|g' .env
+grep -q "CACHE_STORE=" .env && sed -i 's/CACHE_STORE=.*/CACHE_STORE=file/g' .env || echo "CACHE_STORE=file" >> .env
 
 # Configura SQLite
 if grep -q "DB_CONNECTION=sqlite" .env || [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
